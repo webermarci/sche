@@ -20,11 +20,9 @@ func (task *Task) run(scheduler *Scheduler) error {
 
 	err := scheduler.operation(task, task.Data)
 	if err != nil {
-		go func() {
-			scheduler.persistTask(task)
-			time.Sleep(task.Periodicity)
-			task.run(scheduler)
-		}()
+		scheduler.persistTask(task)
+		time.Sleep(task.Periodicity)
+		return task.run(scheduler)
 	}
 
 	scheduler.removeTask(task.ID)

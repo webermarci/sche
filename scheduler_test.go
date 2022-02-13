@@ -3,17 +3,21 @@ package sche
 import (
 	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
 
 func TestScheduler(t *testing.T) {
+	mutex := sync.Mutex{}
 	callCounter := 0
 
 	scheduler := NewScheduler().
 		WithDurationLimit(20 * time.Millisecond).
 		Operation(func(task *Task, data interface{}) error {
+			mutex.Lock()
 			callCounter++
+			mutex.Unlock()
 			return errors.New("next")
 		}).
 		Errors(func(err error) {
@@ -22,11 +26,13 @@ func TestScheduler(t *testing.T) {
 
 	scheduler.Schedule(t.Name(), 10*time.Millisecond)
 
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
+	mutex.Lock()
 	if callCounter != 2 {
 		t.Fatalf("did not run 2 times: %d", callCounter)
 	}
+	mutex.Unlock()
 }
 
 func TestSchedulerWithPersistence(t *testing.T) {
@@ -37,13 +43,16 @@ func TestSchedulerWithPersistence(t *testing.T) {
 		}
 	}()
 
+	mutex := sync.Mutex{}
 	callCounter := 0
 
 	scheduler := NewScheduler().
 		WithDurationLimit(20 * time.Millisecond).
 		WithPersistence(t.Name()).
 		Operation(func(task *Task, data interface{}) error {
+			mutex.Lock()
 			callCounter++
+			mutex.Unlock()
 			return errors.New("next")
 		}).
 		Errors(func(err error) {
@@ -52,11 +61,13 @@ func TestSchedulerWithPersistence(t *testing.T) {
 
 	scheduler.Schedule(t.Name(), 10*time.Millisecond)
 
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
+	mutex.Lock()
 	if callCounter != 2 {
 		t.Fatalf("did not run 2 times: %d", callCounter)
 	}
+	mutex.Unlock()
 }
 
 func TestLoadingTasks(t *testing.T) {
