@@ -1,124 +1,46 @@
 package sche
 
 import (
-	"errors"
-	"os"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestScheduler(t *testing.T) {
-	mutex := sync.Mutex{}
-	callCounter := 0
+	type TestData struct {
+		Text   string
+		Number int
+	}
 
-	scheduler := NewScheduler().
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+
+	scheduler := NewScheduler[TestData]().
 		WithDurationLimit(20 * time.Millisecond).
-		Operation(func(task *Task, data interface{}) error {
-			mutex.Lock()
-			callCounter++
-			mutex.Unlock()
-			return errors.New("next")
+		Operation(func(data TestData) {
+			wg.Done()
 		}).
 		Errors(func(err error) {
 			t.Fatal(err)
 		})
 
-	scheduler.Schedule(t.Name(), 10*time.Millisecond)
+	scheduler.Schedule(TestData{
+		Text:   t.Name(),
+		Number: 42,
+	}, 10*time.Millisecond)
 
-	time.Sleep(100 * time.Millisecond)
-
-	mutex.Lock()
-	if callCounter != 2 {
-		t.Fatalf("did not run 2 times: %d", callCounter)
-	}
-	mutex.Unlock()
-}
-
-func TestSchedulerWithPersistence(t *testing.T) {
-	defer func() {
-		err := os.RemoveAll(t.Name())
-		if err != nil {
-			t.Fatal(err)
-		}
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		t.Fail()
 	}()
 
-	mutex := sync.Mutex{}
-	callCounter := 0
-
-	scheduler := NewScheduler().
-		WithDurationLimit(20 * time.Millisecond).
-		WithPersistence(t.Name()).
-		Operation(func(task *Task, data interface{}) error {
-			mutex.Lock()
-			callCounter++
-			mutex.Unlock()
-			return errors.New("next")
-		}).
-		Errors(func(err error) {
-			t.Fatal(err)
-		})
-
-	scheduler.Schedule(t.Name(), 10*time.Millisecond)
-
-	time.Sleep(100 * time.Millisecond)
-
-	mutex.Lock()
-	if callCounter != 2 {
-		t.Fatalf("did not run 2 times: %d", callCounter)
-	}
-	mutex.Unlock()
-}
-
-func TestLoadingTasks(t *testing.T) {
-	defer func() {
-		err := os.RemoveAll(t.Name())
-		if err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	scheduler := NewScheduler().
-		WithDurationLimit(time.Second).
-		WithPersistence(t.Name()).
-		Operation(func(task *Task, data interface{}) error {
-			return errors.New("next")
-		}).
-		Errors(func(err error) {
-			t.Fatal(err)
-		})
-
-	task := newTask(t.Name(), 10*time.Millisecond, scheduler.durationLimit)
-	scheduler.persistTask(task)
-
-	called := false
-
-	newScheduler := NewScheduler().
-		WithDurationLimit(time.Second).
-		WithPersistence(t.Name()).
-		Operation(func(task *Task, data interface{}) error {
-			called = true
-			return nil
-		}).
-		Errors(func(err error) {
-			t.Fatal(err)
-		})
-
-	if err := newScheduler.Load(); err != nil {
-		t.Fatal(err)
-	}
-
-	time.Sleep(20 * time.Millisecond)
-
-	if !called {
-		t.Fatal("task should have been called by now")
-	}
+	wg.Wait()
 }
 
 func TestSchedulerWithoutOperation(t *testing.T) {
 	hasError := false
 
-	scheduler := NewScheduler().
+	scheduler := NewScheduler[string]().
 		WithDurationLimit(20 * time.Millisecond).
 		Errors(func(err error) {
 			hasError = true
@@ -126,7 +48,7 @@ func TestSchedulerWithoutOperation(t *testing.T) {
 
 	scheduler.Schedule(t.Name(), 10*time.Millisecond)
 
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(25 * time.Millisecond)
 
 	if !hasError {
 		t.Fatal("expected error")

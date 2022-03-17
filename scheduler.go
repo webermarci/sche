@@ -3,86 +3,39 @@ package sche
 import (
 	"errors"
 	"time"
-
-	"github.com/webermarci/pantry"
 )
 
-type Scheduler struct {
-	operation     func(task *Task, data interface{}) error
+type Scheduler[T any] struct {
+	operation     func(data T)
 	errors        func(err error)
-	persisted     bool
-	pantry        pantry.Pantry
 	durationLimit time.Duration
 }
 
-func (scheduler *Scheduler) Operation(operation func(task *Task, data interface{}) error) *Scheduler {
+func (scheduler *Scheduler[T]) Operation(operation func(data T)) *Scheduler[T] {
 	scheduler.operation = operation
 	return scheduler
 }
 
-func (scheduler *Scheduler) Errors(errors func(err error)) *Scheduler {
+func (scheduler *Scheduler[T]) Errors(errors func(err error)) *Scheduler[T] {
 	scheduler.errors = errors
 	return scheduler
 }
 
-func (scheduler *Scheduler) WithPersistence(directory string) *Scheduler {
-	scheduler.persisted = true
-	scheduler.pantry = *pantry.New(&pantry.Options{
-		CleaningInterval:     10 * time.Second,
-		PersistenceDirectory: directory,
-	}).Type(Task{})
-	return scheduler
-}
-
-func (scheduler *Scheduler) WithDurationLimit(duration time.Duration) *Scheduler {
+func (scheduler *Scheduler[T]) WithDurationLimit(duration time.Duration) *Scheduler[T] {
 	scheduler.durationLimit = duration
 	return scheduler
 }
 
-func (scheduler *Scheduler) Load() error {
-	if err := scheduler.pantry.Load(); err != nil {
-		return err
-	}
-
-	for _, value := range scheduler.pantry.GetAll() {
-		task := value.(Task)
-		task.run(scheduler)
-	}
-
-	return nil
-}
-
-func (scheduler *Scheduler) Schedule(data interface{}, periodicity time.Duration) {
+func (scheduler *Scheduler[T]) Schedule(data T, periodicity time.Duration) {
 	if scheduler.operation == nil && scheduler.errors != nil {
 		scheduler.errors(errors.New("missing operation"))
 		return
 	}
 
 	task := newTask(data, periodicity, scheduler.durationLimit)
-
-	if scheduler.persisted {
-		go func() {
-			scheduler.pantry.Set(task.ID, task, scheduler.durationLimit).Persist()
-		}()
-	}
-
 	go task.run(scheduler)
 }
 
-func (scheduler *Scheduler) persistTask(task *Task) error {
-	if scheduler.persisted {
-		return scheduler.pantry.Set(task.ID, *task, scheduler.durationLimit).Persist()
-	}
-	return nil
-}
-
-func (scheduler *Scheduler) removeTask(key string) error {
-	if scheduler.persisted {
-		return scheduler.pantry.Remove(key).Persist()
-	}
-	return nil
-}
-
-func NewScheduler() *Scheduler {
-	return &Scheduler{}
+func NewScheduler[T any]() *Scheduler[T] {
+	return &Scheduler[T]{}
 }

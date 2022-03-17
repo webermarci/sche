@@ -5,33 +5,26 @@ import (
 	"time"
 )
 
-type Task struct {
+type Task[T any] struct {
 	ID          string
-	Data        interface{}
+	Data        T
 	Periodicity time.Duration
 	TimeLimit   time.Time
 }
 
-func (task *Task) run(scheduler *Scheduler) error {
+func (task *Task[T]) run(scheduler *Scheduler[T]) {
 	if time.Now().After(task.TimeLimit) {
-		scheduler.removeTask(task.ID)
-		return nil
+		return
 	}
 
-	err := scheduler.operation(task, task.Data)
-	if err != nil {
-		scheduler.persistTask(task)
-		time.Sleep(task.Periodicity)
-		return task.run(scheduler)
-	}
-
-	scheduler.removeTask(task.ID)
-	return nil
+	scheduler.operation(task.Data)
+	time.Sleep(task.Periodicity)
+	task.run(scheduler)
 }
 
-func newTask(data interface{}, periodicity time.Duration, durationLimit time.Duration) *Task {
+func newTask[T any](data T, periodicity time.Duration, durationLimit time.Duration) *Task[T] {
 	now := time.Now()
-	return &Task{
+	return &Task[T]{
 		ID:          strconv.Itoa(int(now.UnixNano())),
 		Data:        data,
 		Periodicity: periodicity,
